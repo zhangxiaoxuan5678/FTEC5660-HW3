@@ -1,183 +1,232 @@
-# FTEC5660 Homework 3: Fisher's 15-Point Investment Agent
+# FTEC5660 Homework 3: Fisher Interview Agent
 
-Build a LangChain agent that researches a company with tools and applies the
-framework from Philip Fisher's *Common Stocks and Uncommon Profits* (Part One,
-Chapter 3 "What to buy: the fifteen points to look for in a common stock", and
-Chapter 4 "What to buy: applying this to your own needs"). You choose 3 of
-Fisher's 15 points and decide yourself what PASS means for each. For every
-company your agent gives a PASS/FAIL verdict on your 3 points and a short
-summary.
+**Student:** ZHANG Xiaoxuan  
+**Student ID:** 1155266357  
+**Selected Fisher points:** 4, 7 and 11  
+**Model:** `deepseek-v4-flash` through LangChain
 
-The companies are fictional, so the model cannot answer from memory. Unlike a
-pile of reports, the evidence is spread over three sources, and your agent has
-to go and get it with tools, the way Fisher's "scuttlebutt" method sends an
-investor to talk to customers, competitors, suppliers and staff.
+## Run
 
-## Data and tools
-
-`public_test/` has one folder per company. Your code receives four tools per
-company (built by the provided code in `hw3.py`):
-
-| Tool | What it gives you |
-| --- | --- |
-| `list_documents()` | the company's six documents and their dates |
-| `read_document(name)` | one document: the 2025 letter to shareholders, four earnings calls (Q3 2025 to Q2 2026) and a news file (July 2025 to July 2026) |
-| `sql_query(query)` | one read-only SQLite query on the company's database; at most 50 rows come back, so use `SUM`, `GROUP BY` and `WHERE` |
-| `interview(role, topic)` | what one person says about the company; at most **10 interviews per company** |
-
-The documents are what management says. Management's own claims (such as "we
-have never cut research" or "our people are our greatest strength") are not
-evidence on their own: check them against the database and the interviews.
-
-**Database tables** (amounts in USD thousands; dates `YYYY-MM-DD`, months
-`YYYY-MM`, quarters like `2025Q3`; the fiscal year is the calendar year):
-
-| Table | Columns |
-| --- | --- |
-| `company` | name, industry |
-| `industry_medians` | industry, revenue_growth_2y_pct, new_product_share_pct, new_product_sales_per_rd, operating_margin_pct (one row per industry; use the row for the company's own industry) |
-| `orders` | order_id, order_date, product, customer, amount, note (about 3,000 to 4,000 orders from January 2023 to June 2026; revenue is the sum of order amounts) |
-| `products` | product, launch_date |
-| `monthly_costs` | month, cost_of_sales, selling_admin, research_development |
-| `quarterly_cash` | quarter, operating_cash_flow, capex, cash_end |
-| `capex_plan` | year, planned_capex (2026 to 2028) |
-| `returns` | month, units_shipped, units_returned |
-| `insider_trades` | trade_date, person, title, side (`buy` or `sell`), shares, price |
-
-**Terms used in the data.**
-
-| Term | Meaning |
-| --- | --- |
-| FY2025 | Fiscal year 2025. Here the fiscal year is the calendar year, so FY2025 is January to December 2025. |
-| Quarter | Three months of the year: Q1 is January to March, Q2 April to June, Q3 July to September and Q4 October to December. The database writes `2025Q3`; the documents write "third quarter 2025". |
-| Amounts | The database is in **USD thousands** (676,100 means US$676.1 million). The documents use USD millions. |
-| Revenue | Money from sales: the sum of `amount` in `orders`. |
-| Cost of sales | The cost of making the products that were sold. |
-| Selling and admin | The cost of selling and of running the company (sales staff, offices, management). |
-| R&D | Research and development spending, mainly on new products. |
-| Operating margin | Operating profit as a share of revenue: (revenue − cost of sales − selling and admin − R&D) ÷ revenue. |
-| Operating cash flow | Cash that the day-to-day business brings in during a quarter. |
-| Cash at the end of a quarter | The cash the company holds on the last day of that quarter (`cash_end`). |
-| Capex | Capital expenditure: spending on factories, machines and other long-term assets. `capex_plan` holds the planned capex for 2026 to 2028. |
-| Return rate | Units returned ÷ units shipped, from the `returns` table. |
-| Industry median | The middle value for companies in the same industry, from `industry_medians`. |
-| Insider | A director or senior manager of the company. `insider_trades` lists the shares they bought (`buy`) or sold (`sell`). |
-| Earnings call | A meeting each quarter where management presents the quarter's results to investors. Each call quotes that quarter's revenue. |
-
-**Interviews.** Roles: `customer`, `current_employee`, `former_employee`,
-`competitor`, `supplier`. Topics: `sales_team`, `working_conditions`,
-`top_management`, `decision_making`, `competitive_edge`. Only some people know
-about each topic; the others say they can't comment, and that answer still
-uses up one interview.
-
-| Topic | Who knows about it |
-| --- | --- |
-| `sales_team` | customer, competitor |
-| `working_conditions` | current_employee, former_employee |
-| `top_management` | former_employee, supplier |
-| `decision_making` | supplier, customer |
-| `competitive_edge` | competitor, customer |
-
-People who know about a topic always agree with each other, so one good answer
-is enough.
-
-## Choose your 3 points and your rules
-
-Pick any 3 of Fisher's 15 points and write them in `CHOSEN_POINTS` near the
-top of `hw3.py`, e.g. `CHOSEN_POINTS = [1, 7, 15]`. The full questions are in
-`FISHER_POINTS` in `hw3.py` and in the book.
-
-| # | Fisher's point | Where the evidence is |
-| --- | --- | --- |
-| 1 | Market potential for sales growth | database |
-| 2 | New products as current lines mature | database |
-| 3 | Effective research and development | database |
-| 4 | Above-average sales organization | interviews (`sales_team`) |
-| 5 | Worthwhile profit margin | database |
-| 6 | Maintaining or improving margins | database |
-| 7 | Labour and personnel relations | interviews (`working_conditions`) |
-| 8 | Executive relations | interviews (`top_management`) |
-| 9 | Depth of management | interviews (`decision_making`) |
-| 10 | Cost analysis and accounting controls | earnings calls, checked against the database |
-| 11 | Advantage over competitors | interviews (`competitive_edge`) |
-| 12 | Long-range outlook on profits | database |
-| 13 | Growth without dilutive equity financing | database |
-| 14 | Management talks freely about troubles | earnings calls, checked against the database |
-| 15 | Management of unquestionable integrity | news file, checked against the database |
-
-For each of your points, **you design the rule**: which evidence to use, what
-to compute or whom to ask, and where the line between PASS and FAIL lies. PASS
-means the company looks favourable on that point, as Fisher would see it.
-
-We grade your verdicts against our own answer key. It uses one fixed rule per
-point, which we do not publish, and the data never puts a company close to
-the line of that rule, so a sensible reading of Fisher usually gives the same
-answer. **Test your rules on the public answers**:
-`public_test/ground_truth.json` gives the expected verdict on all 15 points
-for each of the 20 public companies, and every point fails in 6 of them. If
-your rule disagrees with the public answers, rethink it.
-
-**Tip: calculate with tools, not in your head.** Do every sum, ratio and
-comparison in SQL or Python, including the number of days between two dates
-(SQLite's `julianday()` gives a date as a number of days).
-
-## Student task
-
-Fill in the three places in `hw3.py` marked `### YOUR CODE HERE`. You may add
-imports, constants and helper functions above them, but do not change the
-provided code below them:
-
-- `CHOSEN_POINTS` lists your 3 points.
-- `build_agent()` creates your model and anything else you need once.
-- `analyze_companies(agent, companies)` receives
-  `{company_folder: [list_documents, read_document, sql_query, interview]}`
-  and returns, for every company,
-  `{"points": {1: "PASS", 7: "FAIL", 15: "PASS"}, "summary": "..."}` (here with
-  `CHOSEN_POINTS = [1, 7, 15]`).
-
-Use the course techniques that fit your points: tool use for the database and
-the interviews, planning which interviews to spend, routing each point to the
-right source, prompt chaining, parallel calls, reflection to check your
-answers, or a combination. Your code must read company data **only through
-the four tools**; do not open `company.db` or `interviews.dat` yourself. Do
-not hard-code folder names, company names or the public answers.
-
-## Setup and public test
+Use Python 3.10 or newer. Clone this public fork and install its dependencies:
 
 ```bash
+git clone https://github.com/zhangxiaoxuan5678/FTEC5660-HW3.git
+cd FTEC5660-HW3
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-echo "DEEPSEEK_API_KEY=your_key_here" > .env
+```
+
+Create a local `.env` file containing `DEEPSEEK_API_KEY=your_actual_key`.
+The file is ignored by git and must never be uploaded. The grader supplies its
+own key. Then run:
+
+```bash
 python3 hw3.py --data-folder public_test
 ```
 
-Use your own DeepSeek API key (from https://platform.deepseek.com). The
-required model is `deepseek-v4-flash`. We grade with our own key, so never put
-a key in your code; `.env` must stay out of git.
+The unchanged starter runner creates `results.csv` and prints the balanced
+point score. To measure the public results and update the report automatically:
 
-The program creates `results.csv` with the columns `company`, `points`,
-`points_correct`, `point_errors`, `interviews_used` and `summary`, and prints
-the point score on your 3 points (the percentage after "balanced"). The point
-score is the average of two shares: the share of truly passing verdicts that
-you marked PASS and the share of truly failing verdicts that you marked FAIL.
-For example, 90% and 60% give (90% + 60%) / 2 = 75%, and marking every point
-PASS gives (100% + 0%) / 2 = 50%. Once `CHOSEN_POINTS` is set, the starter
-runs before you add any API code (it returns no verdicts, so it scores 0%).
+```bash
+python3 evaluate_public.py
+```
 
-`public_test/ground_truth.json` gives the expected verdicts on all 15 points
-for each public company. Grading uses a private set of about 20 unseen
-companies with the same tools and the same answer key rules, but different
-names and wording, and scores your 3 points only.
+This command runs the actual agent before reading the public answer key. It
+updates the Results section and creates `public_results.csv` only when all
+companies have valid verdicts. Repeat it for additional independent runs if
+required; each invocation makes new model calls.
 
-## Homework 3 solution:
-> to students: this is your report, see the homework description.
+Offline reliability checks (no key and no API requests):
+
+```bash
+python3 -m unittest -v test_hw3
+```
+
+## Homework 3 solution
 
 ### My 3 points and rules
-> for each point: why you chose it, your PASS rule in one or two sentences, and the evidence it uses. Quote Fisher where it helps.
 
-### Design
-> a visualization of your agent design and one paragraph describing it.
+I selected sales organization, personnel relations and competitive advantage.
+These criteria address how a business sells, treats the people who operate it,
+and sustains its position against rivals. They also suit Fisher's scuttlebutt
+approach: informed people outside senior management can describe behavior that
+financial statements and optimistic management language may overlook. The
+point questions supplied in `FISHER_POINTS` anchor the rules below; the agent
+does not treat a management claim as independent verification.
+
+| Point | Why I chose it | PASS rule | Evidence |
+| --- | --- | --- | --- |
+| 4: Above-average sales organization | A capable sales team can translate products into repeat business and help customers solve problems. | PASS when an informed witness describes superior technical advice, proactive service, customer support or sales execution that distinguishes the team from rivals. FAIL when the team is passive, unhelpful, lacks expertise or loses business through poor execution; sending a price list alone is insufficient. | `interview(customer, sales_team)`; backup: `competitor`. |
+| 7: Labour and personnel relations | Employee treatment affects organizational stability and the ability to execute a long-term strategy. | PASS when testimony describes constructive relations through fair treatment, reasonable and safe conditions, management listening or stable, committed staff. FAIL for persistent mistreatment, unresolved grievances, unsafe or unreasonable conditions, poor morale or high turnover. | `interview(current_employee, working_conditions)`; backup: `former_employee`. |
+| 11: Advantage over competitors | An attractive business should have a meaningful reason for customers to prefer it that rivals cannot readily reproduce. | PASS when testimony identifies a defensible advantage such as specialized expertise, reliability, cost, service, integration or switching barriers. FAIL when offerings are interchangeable, readily copied or compete mainly on price without a durable differentiator. | `interview(competitor, competitive_edge)`; backup: `customer`. |
+
+These are qualitative rules applied to meaning, including negation and
+comparisons. The implementation does not match public interview phrases to
+labels or impose a required number of PASS/FAIL decisions. Each point is
+judged independently, so a company may pass one criterion and fail another.
+
+### Agent design
+
+```mermaid
+flowchart TD
+    A[Company tool bundle] --> B[Fixed interview plan]
+    B --> C[Point 4: customer]
+    B --> D[Point 7: employee]
+    B --> E[Point 11: competitor]
+    C --> F{Usable evidence?}
+    D --> F
+    E --> F
+    F -->|No| G[Informed backup role]
+    G --> H[Available evidence and rules]
+    F -->|Yes| H
+    H --> I[DeepSeek JSON judgment and self-check]
+    I --> J{Validate IDs and exact quotes}
+    J -->|Invalid, attempts remain| K[Repair with original evidence]
+    K --> I
+    J -->|Valid| L[Verdicts and evidence summary]
+    L --> M[Unchanged runner writes results.csv]
+```
+
+The workflow uses LangChain tools for retrieval and `ChatDeepSeek` for semantic
+judgment. A fixed plan routes each point to someone who knows the topic, rather
+than spending interviews on uninformed roles. The three interviews run in
+parallel, and up to four companies run concurrently. One model call normally
+handles all three points, using point-specific rules and evidence; it also
+performs a prompted self-check before returning JSON. Python then validates
+point IDs, PASS/FAIL values, explanation lengths and the existence of every
+quoted excerpt in its corresponding interview. Invalid responses trigger a
+bounded repair call using the same evidence. The summary is assembled from
+the validated decisions, with each source role and topic attached.
+
+Only the supplied `interview` tool is needed for these selected criteria;
+company files are never opened by the student inference code. The database
+and management documents are reserved for other points and are not needed to
+support these interview-based rules. Under the assignment's assumptions,
+informed witnesses agree, so one usable answer per topic is sufficient.
+Normally each company uses three interviews. An unusable response or tool
+failure permits one informed backup per topic, making six the maximum,
+within the ten-interview limit. Model retries never repeat interviews.
+
+### Reliability and limitations
+
+- Each model request has a 65-second outer timeout, with at most three
+  attempts. A company has a 240-second outer limit. With four companies in
+  flight, 20 companies have a nominal worst-case scheduling bound of about
+  20 minutes, excluding setup and small tool/runner overhead; actual API
+  runtime still needs measurement.
+- JSON errors and quotation failures prompt repair. A quotation match checks
+  source fidelity; it does not prove that the model's interpretation is
+  correct. Semantic accuracy is assessed separately against the public key.
+- Missing evidence for one point does not prevent judgment on other points.
+  A company-level failure returns an entry with an explicit error summary,
+  allowing the unchanged runner to write `results.csv` for the whole batch.
+- Missing API credentials produce explicit missing verdicts. The agent does
+  not silently replace an API failure with guessed PASS/FAIL labels; missing
+  verdicts are correctly penalized by the starter's scorer.
+- Interview contents are treated as data in the prompt. This instruction
+  reduces the risk of following instructions embedded in evidence; it is not
+  a formal guarantee against prompt injection.
+- This is a three-criterion screen. It does not establish that a stock is
+  appropriately valued or suitable for an investor, and it does not assess
+  the other twelve Fisher points. The assignment's fictional evidence and
+  agreement assumptions simplify the disagreements and selection bias that
+  real interviews would involve.
 
 ### Results
-> your point score on `public_test`, the companies where your verdicts disagree with the public answers, and why.
+
+<!-- PUBLIC_RESULTS_START -->
+**Live DeepSeek public-test evaluation is pending.** No usable
+`DEEPSEEK_API_KEY` was configured in the development environment. Therefore no
+public-test point score, semantic success rate or disagreement list is claimed.
+The complete report requires this section to be replaced with measured
+results after `python3 evaluate_public.py` succeeds. The report is not yet a
+fully validated final submission.
+
+Twelve offline reliability tests passed. They cover JSON validation, invented
+and misattributed quotations, duplicate IDs, invalid verdicts, interview
+routing and budget, backup roles, partial tool failure, repair without
+re-interviewing, company isolation, model failure and missing credentials.
+These tests use synthetic evidence and a controlled model response; they do
+not establish DeepSeek accuracy on the public companies.
+<!-- PUBLIC_RESULTS_END -->
+
+The balanced metric is the mean of true-PASS recall and true-FAIL recall.
+Unlike ordinary accuracy, it penalizes a strategy that labels every point
+PASS. The public key is used only after inference by the unchanged starter
+scorer and by `evaluate_public.py` for reporting. No public labels or
+company-specific decisions are embedded in the agent.
+
+### Reference
+
+Philip A. Fisher, *Common Stocks and Uncommon Profits*, Part One, Chapters 3
+and 4. The three question texts are provided in the instructor's
+`FISHER_POINTS` mapping. Assignment specification: *Individual Homework 03*,
+Agentic AI for Business and FinTech (SEEM5660).
+
+## Task 2: Reflection on AI-sycophancy and AI-psychosis
+
+AI-sycophancy is a tendency for an AI assistant to accommodate a user's views
+or expectations even when evidence does not support them. An answer may feel
+helpful because it agrees with the user, while actually weakening the user's
+decision. In this reflection, I use the informal expression AI-psychosis to
+discuss a more harmful feedback loop: an AI conversation may reinforce a
+person's unsupported or distorted beliefs until the person increasingly
+relies on the conversation as confirmation. This expression should not be
+used as a diagnosis, and an investment agent should not attempt to diagnose
+people.
+
+The two problems share a concern about the difference between reassuring
+language and justified confidence. If a user says, "I am sure this company is
+excellent; explain why," a sycophantic investment assistant may select only
+positive evidence. Repeated agreement can make an uncertain interpretation
+feel settled. A more serious feedback loop can develop when the user treats
+the assistant as an authority and interprets each agreeable response as
+independent proof, even though the assistant has introduced no new evidence.
+Repeated model responses are not independent confirmations of a claim.
+
+Designing this Fisher agent makes that distinction concrete. The agent must
+not call every company attractive because that sounds encouraging. A
+customer's report of poor technical support may justify FAIL on sales
+organization, even if management sounds confident elsewhere. Likewise, a
+company can have a capable sales team while treating its employees poorly.
+Giving one positive judgment should not create a positive narrative that
+spills into the other points. I therefore use separate rules and evidence
+for each criterion, and I avoid giving the model a target percentage of
+passing companies.
+
+The workflow also separates evidence collection from judgment. The model
+receives interview statements obtained through the authorized tool, and it
+must attach an exact excerpt to every verdict. Python checks that the excerpt
+exists in the correct interview. This makes fabricated support easier to
+catch and provides a reviewer with something specific to challenge. However,
+a genuine quotation can still be misunderstood or selected unfairly. Exact
+quotation checking improves traceability; it cannot replace semantic testing
+or human judgment.
+
+Uncertainty should also be visible. When the API fails or the interview is
+unavailable, the agent records the failure instead of producing a reassuring
+answer. Similarly, I should not report a high public-test score before
+running the required model. A polished explanation is not evidence that the
+system works. Testing must distinguish software reliability, public-test
+performance and performance on unseen companies.
+
+For a conversational assistant, my preferred behavior is to acknowledge a
+person's concern while asking what evidence supports a claim, considering
+alternative explanations, and stating uncertainty clearly. If a conversation
+appears to be intensifying distress or encouraging harmful decisions, the
+assistant should avoid amplifying the unsupported belief and encourage
+appropriate human support. It should not present itself as an exclusive
+source of truth or encourage isolation from other people.
+
+My main responsibility as the designer is to make disagreement possible and
+reviewable. The system should earn trust through evidence, clear limits and
+correction. Users should be able to see why a verdict was produced, identify
+what is missing, and decide when the question needs a human review.
+
+### AI assistance acknowledgement
+
+AI assistance was used to draft the implementation, documentation and this
+reflection. Offline reliability tests are distinguished from live model
+evaluation above. No unperformed experiments or personal experiences are
+claimed.
