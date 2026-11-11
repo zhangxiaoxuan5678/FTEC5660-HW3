@@ -1,8 +1,9 @@
 # FTEC5660 Homework 3: Fisher Interview Agent
 
-**Student:** ZHANG Xiaoxuan  
-**Student ID:** 1155266357  
-**Selected Fisher points:** 4, 7 and 11  
+**Student:** ZHANG Xiaoxuan
+
+**Selected Fisher points:** 4, 7 and 11
+
 **Model:** `deepseek-v4-flash` through LangChain
 
 ## Run
