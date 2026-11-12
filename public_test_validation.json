@@ -1,0 +1,45 @@
+{
+  "model": "deepseek-v4-flash",
+  "chosen_points": [
+    4,
+    7,
+    11
+  ],
+  "runs": [
+    {
+      "run": 1,
+      "correct": 60,
+      "total": 60,
+      "balanced_accuracy": 1.0,
+      "runtime_seconds": 34.2,
+      "interviews_per_company": 3
+    },
+    {
+      "run": 2,
+      "correct": 60,
+      "total": 60,
+      "balanced_accuracy": 1.0,
+      "runtime_seconds": 29.9,
+      "interviews_per_company": 3
+    },
+    {
+      "run": 3,
+      "correct": 60,
+      "total": 60,
+      "balanced_accuracy": 1.0,
+      "runtime_seconds": 43.9,
+      "interviews_per_company": 3,
+      "environment": "fresh clone and fresh virtual environment"
+    }
+  ],
+  "evaluated_at_utc": "2026-11-12T11:16:33.346537+00:00",
+  "companies_per_run": 20,
+  "mean_balanced_accuracy": 1.0,
+  "total_correct_over_three_runs": 180,
+  "total_verdicts_over_three_runs": 180,
+  "offline_reliability_tests_passed": 12,
+  "fresh_dependency_check": "No broken requirements found.",
+  "tested_agent_sha256": "7dcb092111a6ca123e6af7472d34c47cb0383747035d6084fc65637decc0f283",
+  "fresh_clone_code_commit": "904dbc6a78a067506ef3d492edd4875467fe22d6",
+  "private_test_score": "Not available; public results are not a guarantee of private-test performance."
+}
