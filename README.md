@@ -114,8 +114,8 @@ within the ten-interview limit. Model retries never repeat interviews.
 - Each model request has a 65-second outer timeout, with at most three
   attempts. A company has a 240-second outer limit. With four companies in
   flight, 20 companies have a nominal worst-case scheduling bound of about
-  20 minutes, excluding setup and small tool/runner overhead; actual API
-  runtime still needs measurement.
+  20 minutes, excluding setup and small tool/runner overhead; measured public-test
+  runtimes are reported below.
 - JSON errors and quotation failures prompt repair. A quotation match checks
   source fidelity; it does not prove that the model's interpretation is
   correct. Semantic accuracy is assessed separately against the public key.
@@ -137,19 +137,29 @@ within the ten-interview limit. Model retries never repeat interviews.
 ### Results
 
 <!-- PUBLIC_RESULTS_START -->
-**Live DeepSeek public-test evaluation is pending.** No usable
-`DEEPSEEK_API_KEY` was configured in the development environment. Therefore no
-public-test point score, semantic success rate or disagreement list is claimed.
-The complete report requires this section to be replaced with measured
-results after `python3 evaluate_public.py` succeeds. The report is not yet a
-fully validated final submission.
+Three independent live runs used **`deepseek-v4-flash`** on the 20 public companies, with **60 selected-point judgments per run**.
 
-Twelve offline reliability tests passed. They cover JSON validation, invented
-and misattributed quotations, duplicate IDs, invalid verdicts, interview
-routing and budget, backup roles, partial tool failure, repair without
-re-interviewing, company isolation, model failure and missing credentials.
-These tests use synthetic evidence and a controlled model response; they do
-not establish DeepSeek accuracy on the public companies.
+| Run | Environment | Correct judgments | Balanced point score | Runtime |
+| --- | --- | --- | --- | --- |
+| 1 | Development virtual environment | 60/60 | 100.00% | 34.2 seconds |
+| 2 | Development virtual environment | 60/60 | 100.00% | 29.9 seconds |
+| 3 | Fresh GitHub clone and fresh virtual environment | 60/60 | 100.00% | 43.9 seconds |
+
+**Mean balanced point score: 100.00%. Across the three runs: 180/180 correct judgments.**
+
+No company disagreed with the public answers on any of points 4, 7 or 11 in any run. Every company used exactly **3 interviews** per run, and every run produced a complete `results.csv` within the 30-minute limit. There were no missing final verdicts.
+
+| Selected point | Correct judgments in each run |
+| --- | --- |
+| 4: Sales organization | 20/20 |
+| 7: Personnel relations | 20/20 |
+| 11: Competitive advantage | 20/20 |
+
+The third run was performed from a fresh GitHub clone after installing only `requirements.txt` into a newly created virtual environment. Twelve offline reliability tests also passed in that environment, and `pip check` reported no broken requirements. The instructor-provided tools, runner and scorer remain unchanged.
+
+The latest complete per-company predictions, evidence excerpts and explanations are saved in [public_results.csv](public_results.csv). The three-run metrics and tested-code fingerprint are in [public_test_validation.json](public_test_validation.json). These are measured public-test results; the private test set has not been seen, so its score is not claimed.
+
+Environment: Python 3.12.14; langchain 1.4.10, langchain-core 1.7.7, langchain-deepseek 1.1.1.
 <!-- PUBLIC_RESULTS_END -->
 
 The balanced metric is the mean of true-PASS recall and true-FAIL recall.
